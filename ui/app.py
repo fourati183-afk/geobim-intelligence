@@ -411,8 +411,12 @@ else:
                             json.dump(step5, f, ensure_ascii=False)
                             step5_tmp = f.name
 
-                        # Adapter step6 comme step5 puis step7
-                        step6 = step5  # Validation déjà faite
+                        # Appeler step6_validate pour avoir le statut OK/WARNING/ERROR
+                        try:
+                            from step6_validate import validate_all
+                            step6 = validate_all(step5_tmp)
+                        except Exception:
+                            step6 = step5  # fallback si step6 non disponible
                         with tempfile.NamedTemporaryFile(mode="w", suffix="_step6.json",
                                                           delete=False, encoding="utf-8") as f:
                             json.dump(step6, f, ensure_ascii=False)
