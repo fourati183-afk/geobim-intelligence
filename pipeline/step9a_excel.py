@@ -561,10 +561,201 @@ def build_qa_controlli(ws, data, sondages):
 
 
 # ══════════════════════════════════════════════════════════════
-# PIPELINE PRINCIPAL
+# FEUILLES DYNAMO (SPT / LEFRANC / CAMPIONI)
+# Format attendu par les scripts Dynamo Italferr/RFI
+# BLOCCO SONDAGGIO = "GM - Profile - 2D - StickLog ~ {profilo} ~ {profilo} ~ {id}"
 # ══════════════════════════════════════════════════════════════
 
-def build_excel(step7_json_path):
+def blocco_sondaggio(nome_profilo: str, sid: str) -> str:
+    """Construit le nom du blocco sondaggio pour Dynamo."""
+    return f"GM - Profile - 2D - StickLog ~ {nome_profilo} ~ {nome_profilo} ~ {sid}"
+
+
+def build_dynamo_spt(ws, sondages: list, nome_profilo: str = "PROGETTO"):
+    ws.title = "DYNAMO_SPT"
+    ws.sheet_view.showGridLines = False
+
+    # En-tête
+    headers = [
+        "BLOCCO SONDAGGIO ", "BLOCCO SPT",
+        "PROFONDITA' BLOCCO SPT (m)", "VALORE SPT",
+        "PROFONDITA' VALORE SPT (m)"
+    ]
+    widths = [55, 10, 25, 12, 25]
+    for c, (h, w) in enumerate(zip(headers, widths), 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font   = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+        cell.fill   = PatternFill("solid", start_color="1F4E79")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = BORDER
+        ws.column_dimensions[get_column_letter(c)].width = w
+    ws.row_dimensions[1].height = 22
+
+    row = 2
+    for s in sondages:
+        sid    = s.get("sondage_id", "")
+        blocco = blocco_sondaggio(nome_profilo, sid)
+        spt_list = s.get("spt", [])
+        for i, spt in enumerate(spt_list):
+            depth = spt.get("depth_m") or spt.get("prof")
+            nspt  = spt.get("Nspt")
+            if depth is None or nspt is None:
+                continue
+            # Col C : profondeur négative (convention Dynamo)
+            bg = C_ALT_ROW if i % 2 == 0 else "FFFFFF"
+            ws.cell(row=row, column=1, value=blocco).font = Font(name="Arial", size=8)
+            ws.cell(row=row, column=1).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=1).border = BORDER
+            ws.cell(row=row, column=2, value="SPT").font = Font(name="Arial", size=9, bold=True)
+            ws.cell(row=row, column=2).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=2).border = BORDER
+            ws.cell(row=row, column=3, value=-depth).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=3).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=3).border = BORDER
+            ws.cell(row=row, column=3).number_format = "0.00"
+            ws.cell(row=row, column=4, value=nspt).font = Font(name="Arial", size=9, bold=True)
+            ws.cell(row=row, column=4).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=4).border = BORDER
+            ws.cell(row=row, column=5, value=f"=+C{row}").font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=5).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=5).border = BORDER
+            ws.row_dimensions[row].height = 15
+            row += 1
+
+    # Total
+    ws.cell(row=row, column=1, value=f"TOTALE SPT DYNAMO: {row-2}").font = \
+        Font(name="Arial", bold=True, size=9)
+
+
+def build_dynamo_lefranc(ws, sondages: list, nome_profilo: str = "PROGETTO"):
+    ws.title = "DYNAMO_LEFRANC"
+    ws.sheet_view.showGridLines = False
+
+    headers = [
+        "BLOCCO SONDAGGIO ", "BLOCCO SPT",
+        "PROFONDITA' BLOCCO LEFRANC (m)", "VALORE LEFRANC",
+        "PROFONDITA' VALORE LEFRANC (m)", "PROF. REALE (m)"
+    ]
+    widths = [55, 12, 28, 18, 28, 15]
+    for c, (h, w) in enumerate(zip(headers, widths), 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font   = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+        cell.fill   = PatternFill("solid", start_color="1F4E79")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = BORDER
+        ws.column_dimensions[get_column_letter(c)].width = w
+    ws.row_dimensions[1].height = 22
+
+    row = 2
+    for s in sondages:
+        sid    = s.get("sondage_id", "")
+        blocco = blocco_sondaggio(nome_profilo, sid)
+        perm_list = s.get("permeability", [])
+        for i, perm in enumerate(perm_list):
+            depth = perm.get("depth_m") or perm.get("depth_from_m") or perm.get("prof")
+            perm_v = perm.get("permeability", {})
+            k = perm_v.get("value") if isinstance(perm_v, dict) else None
+            if depth is None or k is None:
+                continue
+            bg = C_ALT_ROW if i % 2 == 0 else "FFFFFF"
+            ws.cell(row=row, column=1, value=blocco).font = Font(name="Arial", size=8)
+            ws.cell(row=row, column=1).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=1).border = BORDER
+            ws.cell(row=row, column=2, value="LEFRANC").font = Font(name="Arial", size=9, bold=True)
+            ws.cell(row=row, column=2).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=2).border = BORDER
+            # Col C = formule Dynamo =+-F*10
+            ws.cell(row=row, column=3, value=f"=+-F{row}*10").font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=3).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=3).border = BORDER
+            ws.cell(row=row, column=3).number_format = "0.00"
+            # Col D = valeur k
+            ws.cell(row=row, column=4, value=k).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=4).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=4).border = BORDER
+            ws.cell(row=row, column=4).number_format = "0.00E+00"
+            # Col E = =+C
+            ws.cell(row=row, column=5, value=f"=+C{row}").font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=5).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=5).border = BORDER
+            # Col F = profondeur réelle
+            ws.cell(row=row, column=6, value=depth).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=6).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=6).border = BORDER
+            ws.cell(row=row, column=6).number_format = "0.00"
+            ws.row_dimensions[row].height = 15
+            row += 1
+
+    ws.cell(row=row, column=1, value=f"TOTALE LEFRANC DYNAMO: {row-2}").font = \
+        Font(name="Arial", bold=True, size=9)
+
+
+def build_dynamo_campioni(ws, sondages: list, nome_profilo: str = "PROGETTO"):
+    ws.title = "DYNAMO_CAMPIONI"
+    ws.sheet_view.showGridLines = False
+
+    headers = [
+        "BLOCCO SONDAGGIO ", "BLOCCO CAMPIONE",
+        "PROFONDITA' (m)", "PROF. REALE (m)", "TIPO"
+    ]
+    widths = [55, 16, 16, 14, 8]
+    for c, (h, w) in enumerate(zip(headers, widths), 1):
+        cell = ws.cell(row=1, column=c, value=h)
+        cell.font   = Font(name="Arial", bold=True, color="FFFFFF", size=9)
+        cell.fill   = PatternFill("solid", start_color="1F4E79")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+        cell.border = BORDER
+        ws.column_dimensions[get_column_letter(c)].width = w
+    ws.row_dimensions[1].height = 22
+
+    row = 2
+    for s in sondages:
+        sid    = s.get("sondage_id", "")
+        blocco = blocco_sondaggio(nome_profilo, sid)
+        # Campioni dans parametri ou dans le JSON
+        for i, perm in enumerate(s.get("permeability", [])):
+            # Note: les vrais campioni seraient dans parametri
+            # Pour l'instant on génère des lignes vides par sondage
+            pass
+
+        # Si campioni disponibles dans parametri
+        param_list = s.get("parametri", [])
+        for i, p in enumerate(param_list):
+            tipo  = p.get("unit_id", "CI")
+            depth = (p.get("parameters") or {}).get("depth", {})
+            d_val = depth.get("value") if isinstance(depth, dict) else None
+            if d_val is None:
+                continue
+            bg = C_ALT_ROW if i % 2 == 0 else "FFFFFF"
+            ws.cell(row=row, column=1, value=blocco).font = Font(name="Arial", size=8)
+            ws.cell(row=row, column=1).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=1).border = BORDER
+            ws.cell(row=row, column=2, value=tipo).font = Font(name="Arial", size=9, bold=True)
+            ws.cell(row=row, column=2).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=2).border = BORDER
+            ws.cell(row=row, column=3, value=f"=-D{row}*10").font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=3).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=3).border = BORDER
+            ws.cell(row=row, column=4, value=d_val).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=4).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=4).border = BORDER
+            ws.cell(row=row, column=5, value=tipo).font = Font(name="Arial", size=9)
+            ws.cell(row=row, column=5).fill   = PatternFill("solid", start_color=bg)
+            ws.cell(row=row, column=5).border = BORDER
+            ws.row_dimensions[row].height = 15
+            row += 1
+
+    if row == 2:
+        ws.cell(row=2, column=1,
+            value="Campioni non disponibili — aggiungere manualmente o estrarre da relazione").font = \
+            Font(name="Arial", italic=True, size=9, color="546E7A")
+
+    ws.cell(row=max(row,3), column=1, value=f"TOTALE CAMPIONI: {max(row-2,0)}").font = \
+        Font(name="Arial", bold=True, size=9)
+
+
+
+def build_excel(step7_json_path, nome_profilo: str = "PROGETTO"):
     step7_path = Path(step7_json_path)
     if not step7_path.exists():
         print(f"❌ Fichier non trouvé : {step7_path}")
@@ -594,6 +785,12 @@ def build_excel(step7_json_path):
     build_metadata(wb.create_sheet("METADATA"), data, sondages)
     print("  🔍 Feuille QA_CONTROLLI...")
     build_qa_controlli(wb.create_sheet("QA_CONTROLLI"), data, sondages)
+    print(f"  🏗️  Feuille DYNAMO_SPT [{nome_profilo}]...")
+    build_dynamo_spt(wb.create_sheet("DYNAMO_SPT"), sondages, nome_profilo)
+    print(f"  🏗️  Feuille DYNAMO_LEFRANC [{nome_profilo}]...")
+    build_dynamo_lefranc(wb.create_sheet("DYNAMO_LEFRANC"), sondages, nome_profilo)
+    print(f"  🏗️  Feuille DYNAMO_CAMPIONI [{nome_profilo}]...")
+    build_dynamo_campioni(wb.create_sheet("DYNAMO_CAMPIONI"), sondages, nome_profilo)
 
     base_name   = step7_path.stem.replace("_step7_final", "")
     output_path = step7_path.parent / (base_name + "_GeoBIM_master.xlsx")

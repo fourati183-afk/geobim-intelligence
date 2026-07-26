@@ -44,10 +44,10 @@ Sondaggi ({len(json_data.get('sondaggi', []))} totali):
 {chr(10).join(sondaggi_summary)}
 
 === DATI STRUTTURATI (JSON) ===
-{json.dumps(json_data, ensure_ascii=False, indent=2)[:15000]}"""
+{json.dumps(json_data, ensure_ascii=False, indent=2)[:5000]}"""
     
     if pages_text:
-        system += f"\n\n=== TESTO COMPLETO DEL RAPPORTO ===\n{pages_text[:30000]}"
+        system += f"\n\n=== TESTO RAPPORTO ===\n{pages_text[:10000]}"
     
     return system
 
@@ -88,45 +88,60 @@ def generate_executive_summary(json_data: Dict) -> str:
     """
     Génère un résumé exécutif en italien depuis le JSON structuré.
     """
-    client  = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
+    client   = anthropic.Anthropic(api_key=os.getenv("ANTHROPIC_API_KEY"))
     sondaggi = json_data.get("sondaggi", [])
-    
-    # Calculs statistiques
+
+    # Calcoli statistici — solo dati aggregati, NO JSON completo
     all_nspt = []
     for s in sondaggi:
         for spt in (s.get("spt") or s.get("spt_data") or []):
             if spt.get("Nspt") is not None:
                 all_nspt.append(spt["Nspt"])
-    
-    prof_max = max(
-        (s.get("profondita_totale_m") or 0) for s in sondaggi
-    ) if sondaggi else 0
-    
+
+    prof_max = max((s.get("profondita_totale_m") or 0) for s in sondaggi) if sondaggi else 0
+
     falda_depths = [
         s["falda"].get("profondita_m") or s["falda"].get("depth_m")
         for s in sondaggi
         if s.get("falda") and not (s["falda"].get("assente") or s["falda"].get("absent"))
         and (s["falda"].get("profondita_m") or s["falda"].get("depth_m"))
     ]
-    
-    prompt = f"""Genera un Executive Summary professionale in italiano per questa relazione geotecnica.
-Struttura: [Progetto] [Campagna indagini] [Sondaggi] [Profondità] [Prove SPT] [Permeabilità] [Falda] [Risultati principali] [Criticità] [Dati mancanti] [Conclusione]
-Stile: tecnico, sintetico, ~300 parole. NON scrivere "conforme NTC 2018" — usa "strutturato per l'esploitazione geotecnica".
 
-DATI:
-- File: {json_data.get('source_file')}
+    # Lista sondaggi sintetica
+    sondaggi_list = []
+    for s in sondaggi[:10]:  # max 10
+        spt_n  = len(s.get("spt") or s.get("spt_data") or [])
+        perm_n = len(s.get("permeability") or s.get("permeability_data") or [])
+        falda  = s.get("falda") or {}
+        fd     = falda.get("profondita_m") or falda.get("depth_m")
+        sondaggi_list.append(
+            f"{s.get('sondage_id','?')}: prof={s.get('profondita_totale_m','?')}m "
+            f"quota={s.get('elevation_m','?')}m SPT={spt_n} Lefranc={perm_n} falda={fd}m"
+        )
+
+    prompt = f"""Genera un Executive Summary professionale in italiano per questa relazione geotecnica.
+Struttura: [Progetto] [Campagna] [Sondaggi] [Profondita] [SPT] [Permeabilita] [Falda] [Risultati] [Conclusione]
+Stile: tecnico, sintetico, ~250 parole. NON scrivere "conforme NTC 2018".
+
+DATI INDAGINI:
+- File: {json_data.get('source_file', 'N/D')}
 - CUP: {json_data.get('cup', 'N/D')}
-- Sondaggi: {len(sondaggi)} totali
-- Profondità max: {prof_max}m
+- Anno: {json_data.get('campaign_year', 'N/D')}
+- Profilo: {json_data.get('detected_profile', 'N/D')}
+- Sondaggi totali: {len(sondaggi)}
+- Profondita max: {prof_max}m
 - SPT totali: {sum(len(s.get('spt') or s.get('spt_data') or []) for s in sondaggi)}
-- Nspt range: {min(all_nspt) if all_nspt else 'N/D'} - {max(all_nspt) if all_nspt else 'N/D'}
+- Nspt min-max: {min(all_nspt) if all_nspt else 'N/D'} - {max(all_nspt) if all_nspt else 'N/D'}
+- Nspt medio: {round(sum(all_nspt)/len(all_nspt),1) if all_nspt else 'N/D'}
 - Lefranc totali: {sum(len(s.get('permeability') or s.get('permeability_data') or []) for s in sondaggi)}
-- Falda: {len(falda_depths)} sondaggi con falda, profondità {round(sum(falda_depths)/len(falda_depths),1) if falda_depths else 'N/D'}m media
-- JSON completo: {json.dumps(json_data, ensure_ascii=False)[:8000]}"""
-    
+- Falda: {len(falda_depths)}/{len(sondaggi)} sondaggi, media {round(sum(falda_depths)/len(falda_depths),1) if falda_depths else 'N/D'}m dal p.c.
+
+SONDAGGI:
+{chr(10).join(sondaggi_list)}"""
+
     response = client.messages.create(
         model=MODEL_CHAT,
-        max_tokens=1500,
+        max_tokens=1000,
         messages=[{"role": "user", "content": prompt}]
     )
     return response.content[0].text

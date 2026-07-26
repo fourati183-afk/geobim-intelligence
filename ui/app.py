@@ -97,6 +97,7 @@ if "chat_history"  not in st.session_state: st.session_state.chat_history  = []
 if "processing"    not in st.session_state: st.session_state.processing    = False
 if "summary_text"  not in st.session_state: st.session_state.summary_text  = None
 if "risk_flags"    not in st.session_state: st.session_state.risk_flags    = None
+if "nome_profilo"  not in st.session_state: st.session_state.nome_profilo  = "PROGETTO"
 
 
 # ── Sidebar ──────────────────────────────────────────────────────────────────
@@ -128,6 +129,15 @@ with st.sidebar:
     st.markdown("### ⚙️ Paramètres")
     chunk_size = st.slider("Pages par chunk IA", 20, 60, 40, 5)
     st.caption("Plus grand = moins d'appels mais plus lent")
+    st.divider()
+    st.markdown("### 🏗️ Dynamo / Civil 3D")
+    nome_profilo = st.text_input(
+        "Nome Profilo",
+        value=st.session_state.get("nome_profilo", "PROGETTO"),
+        help="Nome del profilo Civil 3D per DYNAMO_SPT/LEFRANC/CAMPIONI"
+    )
+    st.caption("Es: LINEA FFSS ROMA-NAPOLI")
+    st.session_state["nome_profilo"] = nome_profilo
 
 
 # ── Header ───────────────────────────────────────────────────────────────────
@@ -428,7 +438,7 @@ else:
                             json.dump(step7, f, ensure_ascii=False)
                             step7_tmp = f.name
 
-                        excel_path = build_excel(step7_tmp)
+                        excel_path = build_excel(step7_tmp, nome_profilo=st.session_state.get("nome_profilo","PROGETTO"))
 
                         # Nettoyer
                         for tmp in [step5_tmp, step6_tmp, step7_tmp]:
