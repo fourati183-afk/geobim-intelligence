@@ -12,7 +12,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 MODEL_CHAT  = "claude-sonnet-4-6"
-MODEL_GUARD = "claude-haiku-4-5-20251001"
+MODEL_GUARD = "claude-sonnet-4-6"
 MAX_TOKENS  = 2000
 
 
