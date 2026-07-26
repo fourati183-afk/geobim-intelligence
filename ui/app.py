@@ -184,14 +184,6 @@ if st.session_state.report_data is None:
                 )
                 st.session_state.pages_text = pages_text
 
-                # Garde-fou : vérifier que c'est bien un rapport géotechnique
-                first_text = " ".join(p["text"] for p in pages[:5] if p.get("text"))
-                from utils.chat import check_if_geotechnical
-                if not check_if_geotechnical(first_text):
-                    st.error("❌ Ce PDF ne semble pas être un rapport géotechnique. Veuillez charger le bon fichier.")
-                    os.unlink(tmp_path)
-                    st.stop()
-
             if mode_excel:
                 # Mode A : Extraction complète
                 with st.spinner("🤖 Extraction IA en cours (Claude Sonnet 4.6)..."):
