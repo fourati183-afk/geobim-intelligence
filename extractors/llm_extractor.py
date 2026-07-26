@@ -112,22 +112,29 @@ EXTRACTION_TOOL = {
 def build_prompt(chunk: List[Dict], chunk_index: int, total_chunks: int) -> List[Dict]:
     """Construit le message à envoyer à Claude pour un chunk de pages."""
     
-    # Assembler le texte des pages natives
-    text_parts = []
+    text_parts  = []
     image_parts = []
-    
+    MAX_CHARS_PER_PAGE = 2000   # limite par page
+    MAX_TOTAL_CHARS    = 40000  # limite totale chunk
+    total_chars = 0
+
     for page in chunk:
         pnum = page["page_num"]
         if page["has_text_layer"]:
-            text_parts.append(f"=== PAGINA {pnum} ===\n{page['text']}")
+            # Tronquer le texte de chaque page
+            text = page["text"][:MAX_CHARS_PER_PAGE]
+            total_chars += len(text)
+            if total_chars > MAX_TOTAL_CHARS:
+                break  # arrêter si trop grand
+            text_parts.append(f"=== PAGINA {pnum} ===\n{text}")
         else:
-            # Page image-only : envoyer l'image
             if page.get("image_b64"):
                 image_parts.append({
                     "page_num": pnum,
-                    "b64": page["image_b64"]
+                    "b64":      page["image_b64"],
+                    "media":    page.get("image_media", "image/jpeg")
                 })
-                text_parts.append(f"=== PAGINA {pnum} === [PAGINA IMMAGINE - vedi immagine allegata]")
+                text_parts.append(f"=== PAGINA {pnum} === [IMMAGINE]")
 
     text_content = "\n\n".join(text_parts)
     
@@ -144,7 +151,7 @@ def build_prompt(chunk: List[Dict], chunk_index: int, total_chunks: int) -> List
             "type": "image",
             "source": {
                 "type": "base64",
-                "media_type": "image/png",
+                "media_type": img.get("media", "image/jpeg"),
                 "data": img["b64"]
             }
         })
